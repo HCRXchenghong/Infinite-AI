@@ -1,0 +1,31 @@
+.DS_Store
+.git
+.gitignore
+.dockerignore
+
+# Local-only configuration and generated data
+.env
+.env.*
+!.env.example
+tmp/
+coverage/
+logs/
+*.log
+
+# Frontend dependencies/build output are recreated in Docker.
+node_modules/
+apps/web/node_modules/
+apps/web/dist/
+apps/web/dist-ssr/
+
+# Local editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Secrets should never enter image layers.
+*.pem
+*.key
+*.p12
+*.pfx

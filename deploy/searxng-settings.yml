@@ -1,0 +1,22 @@
+use_default_settings: true
+
+general:
+  instance_name: "Infinite-AI Search"
+
+search:
+  safe_search: 1
+  default_lang: "zh-CN"
+  formats:
+    - html
+    - json
+
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  method: "GET"
+  limiter: false
+  public_instance: false
+  secret_key: "infinite-ai-local-search-secret"
+
+ui:
+  default_locale: ""
