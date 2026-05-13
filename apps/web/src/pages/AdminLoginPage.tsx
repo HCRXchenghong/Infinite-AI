@@ -3,6 +3,7 @@ import { ShieldCheck, QrCode, KeyRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { BRAND_LOGO_SRC } from '../lib/brand'
+import { readThemePreference, type ThemePreference, useResolvedTheme } from '../lib/theme'
 
 type LoginFormState = {
   email: string
@@ -28,6 +29,17 @@ export function AdminLoginPage() {
   const [setupState, setSetupState] = useState<SetupState | null>(null)
   const [form, setForm] = useState<LoginFormState>({ email: '', password: '', totpCode: '' })
   const [error, setError] = useState('')
+  const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference())
+  const isDark = useResolvedTheme(theme) === 'dark'
+  const colors = {
+    appBg: isDark ? 'bg-[#111111]' : 'bg-[#fafafa]',
+    panelBg: isDark ? 'bg-[#171717]' : 'bg-white',
+    textMain: isDark ? 'text-white' : 'text-[#111111]',
+    textMuted: isDark ? 'text-gray-400' : 'text-[#666666]',
+    border: isDark ? 'border-[#333]' : 'border-[#e5e5e5]',
+    input: isDark ? 'border-[#333] bg-[#111] text-white' : 'border-[#d8d8d8] bg-white text-[#111111]',
+    primary: isDark ? 'bg-white text-black hover:bg-gray-200' : 'bg-[#111111] text-white hover:bg-black',
+  }
 
   useEffect(() => {
     document.title = adminSetupRequired ? 'Infinite-AI 初始化后台' : 'Infinite-AI 后台登录'
@@ -94,17 +106,24 @@ export function AdminLoginPage() {
   }
 
   if (loading) {
-    return <div className="min-h-screen bg-[#111111] text-white flex items-center justify-center">正在加载...</div>
+    return <div className={`min-h-screen flex items-center justify-center ${colors.appBg} ${colors.textMain}`}>正在加载...</div>
   }
 
   return (
-    <div className="min-h-screen bg-[#111111] text-white flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-2xl border border-[#333] bg-[#171717] p-8 shadow-2xl">
+    <div className={`min-h-screen flex items-center justify-center p-6 ${colors.appBg} ${colors.textMain}`}>
+      <div className="absolute top-6 right-6 z-50">
+        <select value={theme} onChange={(event) => setTheme(event.target.value as ThemePreference)} className={`px-3 py-1.5 rounded-md border text-sm ${colors.input}`}>
+          <option value="system">跟随系统</option>
+          <option value="dark">深色主题</option>
+          <option value="light">浅色主题</option>
+        </select>
+      </div>
+      <div className={`w-full max-w-md rounded-2xl border p-8 shadow-2xl ${colors.border} ${colors.panelBg}`}>
         <div className="flex items-center justify-center mb-6">
           <img src={BRAND_LOGO_SRC} alt="Infinite-AI" className="h-12 w-12 rounded-2xl object-cover" />
         </div>
         <h1 className="text-2xl font-semibold text-center mb-2">Infinite-AI 管理后台</h1>
-        <p className="text-sm text-center text-gray-400 mb-8">
+        <p className={`text-sm text-center mb-8 ${colors.textMuted}`}>
           {adminSetupRequired ? '首次进入后台，请先创建超级管理员账号并绑定 2FA。' : '管理员登录需要邮箱、密码和 2FA 验证码。'}
         </p>
 
@@ -120,7 +139,7 @@ export function AdminLoginPage() {
             <input
               value={form.email}
               onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-              className="w-full rounded-lg border border-[#333] bg-[#111] px-4 py-3"
+              className={`w-full rounded-lg border px-4 py-3 ${colors.input}`}
               placeholder="管理员邮箱"
               type="email"
               required
@@ -128,26 +147,26 @@ export function AdminLoginPage() {
             <input
               value={form.password}
               onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-              className="w-full rounded-lg border border-[#333] bg-[#111] px-4 py-3"
+              className={`w-full rounded-lg border px-4 py-3 ${colors.input}`}
               type="password"
               placeholder="管理员密码"
               required
             />
             {error && <div className="text-sm text-red-500">{error}</div>}
-            <button className="w-full rounded-lg bg-white py-3 text-sm font-semibold text-black hover:bg-gray-200">创建管理员并继续绑定 2FA</button>
+            <button className={`w-full rounded-lg py-3 text-sm font-semibold ${colors.primary}`}>创建管理员并继续绑定 2FA</button>
           </form>
         )}
 
         {adminSetupRequired && setupState && (
           <form onSubmit={handleBootstrapComplete} className="space-y-5">
-            <div className="rounded-2xl border border-[#333] bg-[#111] p-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-white">
+            <div className={`rounded-2xl border p-4 ${colors.border} ${isDark ? 'bg-[#111]' : 'bg-[#f8f8f8]'}`}>
+              <div className="flex items-center gap-2 text-sm font-medium">
                 <QrCode className="w-4 h-4" />
                 使用 {setupState.totpAppHint} 扫码绑定
               </div>
               <img src={setupState.qrCodeDataUrl} alt="2FA QR Code" className="mx-auto my-4 h-52 w-52 rounded-xl bg-white p-3" />
-              <div className="rounded-lg border border-[#333] bg-[#0b0b0b] px-3 py-3 text-xs text-gray-300">
-                <div className="flex items-center gap-2 font-medium text-white">
+              <div className={`rounded-lg border px-3 py-3 text-xs ${colors.border} ${isDark ? 'bg-[#0b0b0b] text-gray-300' : 'bg-white text-[#555]'}`}>
+                <div className="flex items-center gap-2 font-medium">
                   <KeyRound className="w-3.5 h-3.5" />
                   无法扫码时手动输入
                 </div>
@@ -157,13 +176,13 @@ export function AdminLoginPage() {
             <input
               value={form.totpCode}
               onChange={(event) => setForm((prev) => ({ ...prev, totpCode: event.target.value }))}
-              className="w-full rounded-lg border border-[#333] bg-[#111] px-4 py-3"
+              className={`w-full rounded-lg border px-4 py-3 ${colors.input}`}
               placeholder="输入 Microsoft Authenticator 当前 6 位验证码"
               inputMode="numeric"
               required
             />
             {error && <div className="text-sm text-red-500">{error}</div>}
-            <button className="w-full rounded-lg bg-white py-3 text-sm font-semibold text-black hover:bg-gray-200">完成初始化并登录后台</button>
+            <button className={`w-full rounded-lg py-3 text-sm font-semibold ${colors.primary}`}>完成初始化并登录后台</button>
           </form>
         )}
 
@@ -172,7 +191,7 @@ export function AdminLoginPage() {
             <input
               value={form.email}
               onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-              className="w-full rounded-lg border border-[#333] bg-[#111] px-4 py-3"
+              className={`w-full rounded-lg border px-4 py-3 ${colors.input}`}
               placeholder="邮箱"
               type="email"
               required
@@ -180,7 +199,7 @@ export function AdminLoginPage() {
             <input
               value={form.password}
               onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-              className="w-full rounded-lg border border-[#333] bg-[#111] px-4 py-3"
+              className={`w-full rounded-lg border px-4 py-3 ${colors.input}`}
               type="password"
               placeholder="密码"
               required
@@ -188,13 +207,13 @@ export function AdminLoginPage() {
             <input
               value={form.totpCode}
               onChange={(event) => setForm((prev) => ({ ...prev, totpCode: event.target.value }))}
-              className="w-full rounded-lg border border-[#333] bg-[#111] px-4 py-3"
+              className={`w-full rounded-lg border px-4 py-3 ${colors.input}`}
               placeholder="2FA 验证码"
               inputMode="numeric"
               required
             />
             {error && <div className="text-sm text-red-500">{error}</div>}
-            <button className="w-full rounded-lg bg-white py-3 text-sm font-semibold text-black hover:bg-gray-200">登录后台</button>
+            <button className={`w-full rounded-lg py-3 text-sm font-semibold ${colors.primary}`}>登录后台</button>
           </form>
         )}
       </div>

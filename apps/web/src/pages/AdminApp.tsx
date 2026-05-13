@@ -10,6 +10,7 @@ import {
   LogOut,
   Menu,
   ChevronDown,
+  ChevronUp,
   Crown,
   Wallet,
   Link,
@@ -26,6 +27,7 @@ import {
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { BRAND_LOGO_SRC } from '../lib/brand'
+import { readThemePreference, type ThemePreference, useResolvedTheme } from '../lib/theme'
 
 const MEMBERSHIP_PLAN_OPTIONS = [
   { code: 'free', label: '免费版' },
@@ -46,7 +48,7 @@ export function AdminApp() {
   }, [location.pathname])
   const [session, setSession] = useState<Awaited<ReturnType<typeof api.getSession>> | null>(null)
   const [ready, setReady] = useState(false)
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference())
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [dashboard, setDashboard] = useState<any>({})
   const [users, setUsers] = useState<any[]>([])
@@ -81,7 +83,7 @@ export function AdminApp() {
   const [activeModelProbeResult, setActiveModelProbeResult] = useState<any>(null)
   const [probingModelKey, setProbingModelKey] = useState('')
 
-  const isDark = theme === 'dark'
+  const isDark = useResolvedTheme(theme) === 'dark'
   const colors = {
     appBg: isDark ? 'bg-[#111111]' : 'bg-[#f9f9f9]',
     sidebarBg: isDark ? 'bg-[#000000]' : 'bg-[#ffffff]',
@@ -215,8 +217,8 @@ export function AdminApp() {
     setFinance(financeResponse.status === 'fulfilled' ? financeResponse.value ?? { ifpayConfig: {}, transactions: [] } : { ifpayConfig: {}, transactions: [] })
     setSettings(
       settingsResponse.status === 'fulfilled'
-        ? settingsResponse.value ?? { oauthProviders: [], registerEnabled: false, authSecurity: {}, emailGateway: {}, smsGateway: {}, modelMembershipLimits: {}, modelContextLimits: { default: 0, models: {}, plans: {}, users: {} }, infiniteCodeQuotaConfig: {}, shareCollaborationConfig: {}, searchProvider: {} }
-        : { oauthProviders: [], registerEnabled: false, authSecurity: {}, emailGateway: {}, smsGateway: {}, modelMembershipLimits: {}, modelContextLimits: { default: 0, models: {}, plans: {}, users: {} }, infiniteCodeQuotaConfig: {}, shareCollaborationConfig: {}, searchProvider: {} },
+        ? settingsResponse.value ?? { oauthProviders: [], registerEnabled: false, authSecurity: {}, emailGateway: {}, smsGateway: {}, modelMembershipLimits: {}, modelContextLimits: { default: 0, models: {}, plans: {}, users: {} }, infiniteCodeQuotaConfig: {}, infiniteCodeModelLimits: {}, shareCollaborationConfig: {}, searchProvider: {} }
+        : { oauthProviders: [], registerEnabled: false, authSecurity: {}, emailGateway: {}, smsGateway: {}, modelMembershipLimits: {}, modelContextLimits: { default: 0, models: {}, plans: {}, users: {} }, infiniteCodeQuotaConfig: {}, infiniteCodeModelLimits: {}, shareCollaborationConfig: {}, searchProvider: {} },
     )
     const failedSections = [
       { name: 'dashboard', result: dashboardResponse },
@@ -293,6 +295,7 @@ export function AdminApp() {
       const payload = {
         ...activeModel,
         slug: String(activeModel.slug ?? '').trim(),
+        sortOrder: Number(activeModel.sortOrder ?? 0) || 0,
         upstreamModel: String(activeModel.upstreamModel ?? '').trim(),
         endpoints: Array.isArray(activeModel.endpoints) ? activeModel.endpoints.filter((endpoint: any) => endpoint.baseUrl?.trim()) : [],
       }
@@ -346,6 +349,41 @@ export function AdminApp() {
       setNotice({
         title: '模型删除失败',
         body: error instanceof Error ? error.message : '模型删除失败，请稍后再试。',
+      })
+    }
+  }
+
+  async function handleMoveModel(model: any, direction: -1 | 1) {
+    const orderedModels = models
+      .filter((item) => item.modelType !== 'image')
+      .sort((a, b) => (Number(a.sortOrder ?? 0) || 0) - (Number(b.sortOrder ?? 0) || 0) || String(a.name || a.slug).localeCompare(String(b.name || b.slug), 'zh-CN'))
+    const currentIndex = orderedModels.findIndex((item) => item.slug === model.slug)
+    const targetIndex = currentIndex + direction
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedModels.length) return
+    const nextOrder = orderedModels.map((item, index) => {
+      if (index === currentIndex) return orderedModels[targetIndex]
+      if (index === targetIndex) return orderedModels[currentIndex]
+      return item
+    })
+    try {
+      await Promise.all(nextOrder.map((item, index) => api.adminUpdateModel(item.slug, {
+        ...item,
+        sortOrder: index * 10,
+        endpoints: Array.isArray(item.endpoints) ? item.endpoints : [],
+      })))
+      setModels((current) => current.map((item) => {
+        const nextIndex = nextOrder.findIndex((next) => next.slug === item.slug)
+        if (nextIndex < 0) return item
+        return { ...item, sortOrder: nextIndex * 10 }
+      }))
+      setNotice({
+        title: '模型排序已更新',
+        body: '用户端模型选择器会按新的展示顺序同步显示。',
+      })
+    } catch (error) {
+      setNotice({
+        title: '模型排序保存失败',
+        body: error instanceof Error ? error.message : '模型排序保存失败，请稍后再试。',
       })
     }
   }
@@ -635,6 +673,61 @@ export function AdminApp() {
     })
   }
 
+  async function saveInfiniteCodeModelLimits() {
+    try {
+      await api.adminUpdateInfiniteCodeModelLimits(normalizeModelMembershipLimitPayload(settings?.infiniteCodeModelLimits))
+      setNotice({
+        title: 'Infinite Code 模型权限已保存',
+        body: '桌面软件的可用模型、禁用模型和 24 小时模型次数限制已经生效。',
+      })
+      await refresh()
+    } catch (error) {
+      setNotice({
+        title: 'Infinite Code 模型权限保存失败',
+        body: error instanceof Error ? error.message : 'Infinite Code 模型权限保存失败，请检查输入后重试。',
+      })
+    }
+  }
+
+  function getInfiniteCodeModelPlanLimit(planCode: string, modelSlug: string) {
+    return settings?.infiniteCodeModelLimits?.[planCode]?.[modelSlug]
+  }
+
+  function setInfiniteCodeModelPlanAvailability(planCode: string, modelSlug: string, enabled: boolean) {
+    setSettings((prev: any) => {
+      const nextLimits = { ...(prev?.infiniteCodeModelLimits ?? {}) }
+      const planLimits = { ...(nextLimits[planCode] ?? {}) }
+      if (enabled) {
+        delete planLimits[modelSlug]
+      } else {
+        planLimits[modelSlug] = 0
+      }
+      nextLimits[planCode] = planLimits
+      return {
+        ...(prev ?? {}),
+        infiniteCodeModelLimits: nextLimits,
+      }
+    })
+  }
+
+  function setInfiniteCodeModelPlanQuota(planCode: string, modelSlug: string, value: string) {
+    setSettings((prev: any) => {
+      const nextLimits = { ...(prev?.infiniteCodeModelLimits ?? {}) }
+      const planLimits = { ...(nextLimits[planCode] ?? {}) }
+      const trimmed = value.trim()
+      if (trimmed === '') {
+        delete planLimits[modelSlug]
+      } else {
+        planLimits[modelSlug] = trimmed
+      }
+      nextLimits[planCode] = planLimits
+      return {
+        ...(prev ?? {}),
+        infiniteCodeModelLimits: nextLimits,
+      }
+    })
+  }
+
   async function saveInfiniteCodeQuotaConfig() {
     try {
       await api.adminUpdateInfiniteCodeQuotaConfig(normalizeInfiniteCodeQuotaPayload(settings?.infiniteCodeQuotaConfig))
@@ -771,6 +864,7 @@ export function AdminApp() {
         protocol: 'openai',
         strategy: 'sequential',
         modelType: 'chat',
+        sortOrder: models.filter((item) => item.modelType !== 'image').length * 10,
         upstreamModel: '',
         description: '',
         promptEnabled: false,
@@ -796,6 +890,7 @@ export function AdminApp() {
       protocol: 'openai',
       strategy: 'sequential',
       modelType: 'image',
+      sortOrder: 1000,
       upstreamModel: 'gpt-image-2',
       description: '独立于对话模型的照片生成配置，供 /v1/images/generations 调用。',
       promptEnabled: false,
@@ -835,7 +930,9 @@ export function AdminApp() {
     'finance-management': '财务管理',
     settings: '全局设置',
   }
-  const chatModels = models.filter((model) => model.modelType !== 'image')
+  const chatModels = models
+    .filter((model) => model.modelType !== 'image')
+    .sort((a, b) => (Number(a.sortOrder ?? 0) || 0) - (Number(b.sortOrder ?? 0) || 0) || String(a.name || a.slug).localeCompare(String(b.name || b.slug), 'zh-CN'))
   const photoModel = models.find((model) => model.modelType === 'image') ?? null
   const photoProbeResult = photoModel ? modelProbeResults[modelProbeKey(photoModel)] ?? null : null
   const pendingServiceAlerts = serviceAlerts.filter((alert) => alert.status !== 'resolved')
@@ -1048,10 +1145,10 @@ export function AdminApp() {
                       ))}
                     </tbody>
                   </table>
-                </div>
-              </div>
-            </div>
-          )}
+	                </div>
+	              </div>
+		            </div>
+		          )}
 
           {currentView === 'models' && (
             <div className="space-y-6">
@@ -1101,10 +1198,14 @@ export function AdminApp() {
                       <div className={`${colors.textMuted} text-xs mb-1`}>上游模型</div>
                       <div className="font-medium">{photoModel.upstreamModel || '-'}</div>
                     </div>
-                    <div className={`rounded-xl border p-3 ${colors.border}`}>
-                      <div className={`${colors.textMuted} text-xs mb-1`}>提示词注入</div>
-                      <div className="font-medium">{photoModel.promptEnabled ? '已开启' : '未开启'}</div>
-                    </div>
+                      <div className={`rounded-xl border p-3 ${colors.border}`}>
+                        <div className={`${colors.textMuted} text-xs mb-1`}>提示词注入</div>
+                        <div className="font-medium">{photoModel.promptEnabled ? '已开启' : '未开启'}</div>
+                      </div>
+                      <div className={`rounded-xl border p-3 ${colors.border}`}>
+                        <div className={`${colors.textMuted} text-xs mb-1`}>展示排序</div>
+                        <div className="font-medium">{Number(photoModel.sortOrder ?? 0) || 0}</div>
+                      </div>
                   </div>
                   <ModelProbePanel probe={photoProbeResult} colors={colors} />
                   <div className={`pt-4 border-t flex flex-col gap-3 md:flex-row md:items-center md:justify-between ${colors.border}`}>
@@ -1132,50 +1233,66 @@ export function AdminApp() {
                   <div>
                     <h3 className="text-xl font-semibold">对话模型</h3>
                     <p className={`mt-2 text-sm ${colors.textMuted}`}>客户端聊天、深度搜索和开发者对话接口都从这里读取模型路由。</p>
+                    <p className={`mt-1 text-xs ${colors.textMuted}`}>展示排序越小越靠前，保存后用户端模型选择器会按这个顺序展示。</p>
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {chatModels.map((model) => (
-                  <div key={model.id} className={`${panelClass} p-6 flex flex-col gap-5`}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-semibold">{model.name}</h3>
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-mono border ${colors.border} ${colors.textMuted}`}>{model.slug}</span>
+              <div className={`rounded-xl border overflow-hidden ${colors.cardBg} ${colors.border}`}>
+                {chatModels.map((model, index) => (
+                  <div key={model.id} className={`p-5 border-b last:border-b-0 ${colors.border}`}>
+                    <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="flex min-w-0 flex-1 gap-4">
+                        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border font-mono text-sm font-semibold ${colors.border} ${colors.inputBg}`}>
+                          {String(index + 1).padStart(2, '0')}
                         </div>
-                        <p className={`text-sm ${colors.textMuted}`}>{model.description || '暂无描述'}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-base font-semibold">{model.name}</h3>
+                            <span className={`rounded-md border px-2 py-1 text-[11px] font-mono ${colors.border} ${colors.textMuted}`}>{model.slug}</span>
+                            <span className={`rounded-md border px-2 py-1 text-xs font-medium ${model.active ? 'border-green-500/30 text-green-500 bg-green-500/10' : 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'}`}>
+                              {formatModelAvailability(model.active)}
+                            </span>
+                            <span className={`rounded-md border px-2 py-1 text-xs ${colors.border} ${colors.textMuted}`}>
+                              排序 {Number(model.sortOrder ?? 0) || 0}
+                            </span>
+                          </div>
+                          <p className={`mt-2 text-sm ${colors.textMuted}`}>{model.description || '暂无描述'}</p>
+                          <div className={`mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border text-sm md:grid-cols-6 ${colors.border} ${isDark ? 'bg-[#333333]' : 'bg-[#e5e5e5]'}`}>
+                            {[
+                              ['模型类型', formatModelType(model.modelType)],
+                              ['协议 / 策略', `${formatProtocol(model.protocol)} / ${formatStrategy(model.strategy)}`],
+                              ['上游模型', model.upstreamModel || '-'],
+                              ['提示词', model.promptEnabled ? '已开启' : '未开启'],
+                              ['展示排序', Number(model.sortOrder ?? 0) || 0],
+                              ['端点数量', Array.isArray(model.endpoints) ? model.endpoints.length : 0],
+                            ].map((item) => (
+                              <div key={`${model.slug}-${item[0]}`} className={`${colors.cardBg} p-3`}>
+                                <div className={`${colors.textMuted} mb-1 text-xs`}>{item[0]}</div>
+                                <div className="truncate font-medium">{item[1]}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <div className={`px-2.5 py-1 rounded-full text-xs font-medium border ${model.active ? 'border-green-500/30 text-green-500 bg-green-500/10' : 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'}`}>
-                        {formatModelAvailability(model.active)}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div className={`rounded-xl border p-3 ${colors.border}`}>
-                        <div className={`${colors.textMuted} text-xs mb-1`}>模型类型</div>
-                        <div className="font-medium">{formatModelType(model.modelType)}</div>
-                      </div>
-                      <div className={`rounded-xl border p-3 ${colors.border}`}>
-                        <div className={`${colors.textMuted} text-xs mb-1`}>协议 / 策略</div>
-                        <div className="font-medium">{formatProtocol(model.protocol)} / {formatStrategy(model.strategy)}</div>
-                      </div>
-                      <div className={`rounded-xl border p-3 ${colors.border}`}>
-                        <div className={`${colors.textMuted} text-xs mb-1`}>上游模型</div>
-                        <div className="font-medium">{model.upstreamModel || '-'}</div>
-                      </div>
-                      <div className={`rounded-xl border p-3 ${colors.border}`}>
-                        <div className={`${colors.textMuted} text-xs mb-1`}>提示词注入</div>
-                        <div className="font-medium">{model.promptEnabled ? '已开启' : '未开启'}</div>
-                      </div>
-                      <div className={`rounded-xl border p-3 ${colors.border}`}>
-                        <div className={`${colors.textMuted} text-xs mb-1`}>端点数量</div>
-                        <div className="font-medium">{Array.isArray(model.endpoints) ? model.endpoints.length : 0}</div>
-                      </div>
-                    </div>
-                    <ModelProbePanel probe={modelProbeResults[modelProbeKey(model)] ?? null} colors={colors} />
-                    <div className={`pt-4 border-t flex flex-col gap-3 md:flex-row md:items-center md:justify-between ${colors.border}`}>
-                      <span className={`text-xs ${colors.textMuted}`}>保存后会同步到用户端模型列表</span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <div className={`flex rounded-lg border ${colors.border}`}>
+                          <button
+                            onClick={() => void handleMoveModel(model, -1)}
+                            disabled={index === 0}
+                            title="上移展示顺序"
+                            className={`p-2 ${index === 0 ? `${colors.textMuted} opacity-40` : colors.hover}`}
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => void handleMoveModel(model, 1)}
+                            disabled={index === chatModels.length - 1}
+                            title="下移展示顺序"
+                            className={`border-l p-2 ${colors.border} ${index === chatModels.length - 1 ? `${colors.textMuted} opacity-40` : colors.hover}`}
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        </div>
                         <button
                           onClick={() => void handleProbeModel(model)}
                           disabled={probingModelKey === modelProbeKey(model)}
@@ -1190,6 +1307,9 @@ export function AdminApp() {
                           删除模型
                         </button>
                       </div>
+                    </div>
+                    <div className="mt-4">
+                      <ModelProbePanel probe={modelProbeResults[modelProbeKey(model)] ?? null} colors={colors} />
                     </div>
                   </div>
                 ))}
@@ -1679,9 +1799,9 @@ export function AdminApp() {
                     保存 Infinite Code 配额
                   </button>
                 </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-                  {MEMBERSHIP_PLAN_OPTIONS.map((plan) => (
-                    <div key={`infinite-code-${plan.code}`} className={`rounded-2xl border p-5 ${colors.border}`}>
+	                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+	                  {MEMBERSHIP_PLAN_OPTIONS.map((plan) => (
+	                    <div key={`infinite-code-${plan.code}`} className={`rounded-2xl border p-5 ${colors.border}`}>
                       <div className="text-base font-semibold">{plan.label}</div>
                       <div className={`mt-1 text-xs ${colors.textMuted}`}>当前套餐的周期额度设置</div>
                       <div className="mt-4 space-y-3">
@@ -1731,11 +1851,77 @@ export function AdminApp() {
                         </div>
                       </div>
                     </div>
+	                  ))}
+	                </div>
+	              </div>
+              <div className={`${panelClass} p-6 space-y-5`}>
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold">Infinite Code 软件模型权限</h3>
+                    <p className={`mt-2 text-sm ${colors.textMuted}`}>这里单独控制桌面 Infinite Code 可见但不可点的模型、可用套餐，以及每个模型在当前周期内最多可成功回复多少次。免费版默认只允许 Auto。</p>
+                  </div>
+                  <button onClick={() => void saveInfiniteCodeModelLimits()} className={`px-4 py-2.5 rounded-xl text-sm font-medium ${colors.btnPrimary}`}>
+                    保存软件模型权限
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {chatModels.map((model) => (
+                    <div key={`infinite-code-limit-${model.slug}`} className={`rounded-2xl border p-5 ${colors.border}`}>
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="text-base font-semibold">{model.name || model.slug}</div>
+                          <div className={`mt-1 text-sm ${colors.textMuted}`}>{model.slug}</div>
+                        </div>
+                        <div className={`rounded-xl border px-3 py-2 text-xs ${colors.border} ${colors.textMuted}`}>
+                          展示排序 {Number(model.sortOrder ?? 0) || 0}
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                        {MEMBERSHIP_PLAN_OPTIONS.map((plan) => {
+                          const rawLimit = getInfiniteCodeModelPlanLimit(plan.code, model.slug)
+                          const isAllowed = rawLimit !== 0 && rawLimit !== '0'
+                          const quotaValue = isAllowed && rawLimit !== undefined && rawLimit !== null ? String(rawLimit) : ''
+                          return (
+                            <div key={`infinite-code-limit-${model.slug}-${plan.code}`} className={`rounded-xl border p-3 ${colors.border}`}>
+                              <div className="flex items-center justify-between gap-3">
+                                <div className={`text-xs font-medium ${colors.textMuted}`}>{plan.label}</div>
+                                <label className="flex items-center gap-2 text-xs font-medium">
+                                  <input
+                                    type="checkbox"
+                                    checked={isAllowed}
+                                    onChange={(event) => setInfiniteCodeModelPlanAvailability(plan.code, model.slug, event.target.checked)}
+                                  />
+                                  <span>{isAllowed ? '允许使用' : '禁止使用'}</span>
+                                </label>
+                              </div>
+                              <input
+                                value={quotaValue}
+                                onChange={(event) => setInfiniteCodeModelPlanQuota(plan.code, model.slug, event.target.value)}
+                                className={`${inputClass} mt-3 ${!isAllowed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                type="number"
+                                min={1}
+                                step={1}
+                                placeholder={isAllowed ? '留空=按套餐总额度限制' : '当前套餐不可用'}
+                                disabled={!isAllowed}
+                              />
+                              <div className={`mt-2 text-[11px] leading-5 ${colors.textMuted}`}>
+                                {isAllowed ? '当前周期模型成功回复次数上限' : '保存后软件里仍展示，但不能点击选择'}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
                   ))}
+                  {chatModels.length === 0 && (
+                    <div className={`rounded-2xl border border-dashed p-6 text-sm ${colors.border} ${colors.textMuted}`}>
+                      先在模型管理里创建对话模型，这里才会出现 Infinite Code 软件模型权限。
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
+	            </div>
+	          )}
 
           {currentView === 'finance-management' && (
             <div className="space-y-6">
@@ -1822,7 +2008,8 @@ export function AdminApp() {
               <div className={`${sectionClass} overflow-hidden`}>
                 <div className={`p-6 border-b ${colors.border}`}>
                   <h3 className="text-base font-medium mb-1">控制台主题</h3>
-                  <select value={theme} onChange={(event) => setTheme(event.target.value as 'dark' | 'light')} className={`${inputClass} max-w-xs`}>
+                  <select value={theme} onChange={(event) => setTheme(event.target.value as ThemePreference)} className={`${inputClass} max-w-xs`}>
+                    <option value="system">跟随系统</option>
                     <option value="dark">深色主题</option>
                     <option value="light">浅色主题</option>
                   </select>
@@ -2095,6 +2282,7 @@ export function AdminApp() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input value={activeModel.slug ?? ''} onChange={(event) => setActiveModel((prev: any) => ({ ...prev, slug: event.target.value }))} className={inputClass} placeholder="model slug" disabled={!isCreatingModel} />
                 <input value={activeModel.name ?? ''} onChange={(event) => setActiveModel((prev: any) => ({ ...prev, name: event.target.value }))} className={inputClass} placeholder="显示名称" />
+                <input value={activeModel.sortOrder ?? 0} onChange={(event) => setActiveModel((prev: any) => ({ ...prev, sortOrder: event.target.value }))} className={inputClass} type="number" step={1} placeholder="展示排序，越小越靠前" />
                 <input value={activeModel.upstreamModel ?? ''} onChange={(event) => setActiveModel((prev: any) => ({ ...prev, upstreamModel: event.target.value }))} className={inputClass} placeholder="上游模型名，例如 gpt-4.1" />
                 <select value={activeModel.modelType} onChange={(event) => setActiveModel((prev: any) => ({ ...prev, modelType: event.target.value }))} className={inputClass}>
                   <option value="chat">对话模型</option>

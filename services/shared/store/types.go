@@ -192,6 +192,7 @@ type ModelRoute struct {
 	ModelType     string          `json:"modelType"`
 	UpstreamModel string          `json:"upstreamModel"`
 	Description   string          `json:"description"`
+	SortOrder     int             `json:"sortOrder"`
 	PromptEnabled bool            `json:"promptEnabled"`
 	PromptText    string          `json:"promptText,omitempty"`
 	Active        bool            `json:"active"`

@@ -38,6 +38,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { BRAND_LOGO_SRC } from '../lib/brand'
 import { getPublicAPIBaseURL } from '../lib/runtime'
+import { normalizeThemePreference, readThemePreference, type ThemePreference, useResolvedTheme } from '../lib/theme'
 
 type SessionState = Awaited<ReturnType<typeof api.getSession>>
 
@@ -666,7 +667,7 @@ export function UserApp() {
 
   const [session, setSession] = useState<SessionState | null>(null)
   const [loading, setLoading] = useState(true)
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference())
   const [language, setLanguage] = useState('auto')
   const [chatHistoryEnabled, setChatHistoryEnabled] = useState(true)
   const [savedChatHistoryEnabled, setSavedChatHistoryEnabled] = useState(true)
@@ -760,7 +761,7 @@ export function UserApp() {
   const conversationMessageCacheRef = useRef<Record<string, any[]>>({})
   const composerPreviewUrlsRef = useRef<Set<string>>(new Set())
 
-  const isDark = theme === 'dark'
+  const isDark = useResolvedTheme(theme) === 'dark'
   const sharedConversationId = useMemo(() => {
     if (!location.pathname.startsWith('/share/')) {
       return ''
@@ -1489,7 +1490,7 @@ export function UserApp() {
       }
       const settings = currentSession.user ? await api.getUserSettings().catch(() => null) : null
       if (settings) {
-        setTheme(settings.theme === 'light' ? 'light' : 'dark')
+        setTheme(normalizeThemePreference(settings.theme))
         setLanguage(settings.language || 'auto')
         setIsDeepSearch(storedDeepSearchPreference ?? Boolean(settings.deepSearchDefault))
         const nextChatHistoryEnabled = settings.chatHistoryEnabled !== false
@@ -4214,7 +4215,8 @@ export function UserApp() {
                   <h3 className={`text-lg font-medium mb-6 pb-4 border-b ${isDark ? 'border-[#333]' : 'border-[#e5e5e5]'}`}>通用</h3>
                   <div className={`flex items-center justify-between pb-4 border-b ${isDark ? 'border-[#333]' : 'border-[#e5e5e5]'}`}>
                     <div className="font-medium text-sm">主题</div>
-                    <select value={theme} onChange={(event) => setTheme(event.target.value as 'dark' | 'light')} className={`border rounded-lg px-3 py-2 text-sm ${colors.inputBg} ${colors.border}`}>
+                    <select value={theme} onChange={(event) => setTheme(event.target.value as ThemePreference)} className={`border rounded-lg px-3 py-2 text-sm ${colors.inputBg} ${colors.border}`}>
+                      <option value="system">跟随系统</option>
                       <option value="dark">深色模式</option>
                       <option value="light">浅色模式</option>
                     </select>

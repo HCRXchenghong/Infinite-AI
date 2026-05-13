@@ -37,6 +37,14 @@ select {
   font: inherit;
 }
 
+img[src="/brand-logo.png"] {
+  filter: none;
+}
+
+[data-color-scheme="dark"] img[src="/brand-logo.png"] {
+  filter: invert(1);
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 10px;
 }

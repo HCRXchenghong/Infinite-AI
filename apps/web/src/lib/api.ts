@@ -613,6 +613,7 @@ export const api = {
       ...asObject(response, { models: [] }),
       models: asArray(response?.models).map((model: any) => ({
         ...model,
+        sortOrder: Number(model?.sortOrder ?? 0) || 0,
         endpoints: asArray(model?.endpoints),
       })),
     }))
@@ -704,7 +705,7 @@ export const api = {
   },
   adminSettings() {
     return request<any>('/admin/settings?__api=1').then((response) => ({
-      ...asObject(response, { registerEnabled: false, oauthProviders: [], authSecurity: {}, emailGateway: {}, smsGateway: {}, modelMembershipLimits: {}, modelContextLimits: {}, infiniteCodeQuotaConfig: {}, searchProvider: {} }),
+      ...asObject(response, { registerEnabled: false, oauthProviders: [], authSecurity: {}, emailGateway: {}, smsGateway: {}, modelMembershipLimits: {}, modelContextLimits: {}, infiniteCodeQuotaConfig: {}, infiniteCodeModelLimits: {}, searchProvider: {} }),
       oauthProviders: asArray(response?.oauthProviders),
       authSecurity: asObject(response?.authSecurity, {
         captchaRequiredOnRegister: true,
@@ -740,6 +741,7 @@ export const api = {
       modelMembershipLimits: asObject(response?.modelMembershipLimits, {}),
       modelContextLimits: asObject(response?.modelContextLimits, { default: 0, models: {}, plans: {}, users: {} }),
       infiniteCodeQuotaConfig: asObject(response?.infiniteCodeQuotaConfig, {}),
+      infiniteCodeModelLimits: asObject(response?.infiniteCodeModelLimits, {}),
       searchProvider: asObject(response?.searchProvider, {
         enabled: true,
         provider: 'openai_then_searxng',
@@ -805,6 +807,12 @@ export const api = {
   },
   adminUpdateInfiniteCodeQuotaConfig(payload: any) {
     return request('/admin/settings/infinite-code-quota', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+  adminUpdateInfiniteCodeModelLimits(payload: any) {
+    return request('/admin/settings/infinite-code-model-limits', {
       method: 'PUT',
       body: JSON.stringify(payload),
     })

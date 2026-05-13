@@ -2,6 +2,11 @@
 
 Infinite-AI 是一套全栈 AI 服务系统，包含类 ChatGPT 的网页端、后台管理端、兑换与会员体系、OpenAI/Anthropic 兼容 API、多模态聊天、图片生成/编辑、联网搜索，以及多供应商路由与自动降级能力。
 
+当前版本：v2.0.0
+GitHub：<https://github.com/HCRXchenghong/Infinite-AI>
+
+v2.0.0 是当前阶段的集成提交版本。Agent 能力目前仍存在已知问题，尤其是工具执行、工作区连续性、归档、审查、MCP、Skill、GitHub 与 Gitee 接入仍需要继续完整验证；前端 UI 也会进入二期优化，重点处理排版密度、响应式、套餐/用量/管理页风格一致性。
+
 项目采用前后端分离与多服务架构：前端基于 React/Vite，后端服务使用 Go，数据持久化使用 PostgreSQL，Redis 负责会话与限流状态，MinIO 存储附件，NATS 支撑后台任务，SearXNG 作为本地联网搜索兜底服务。
 
 ## 功能特性

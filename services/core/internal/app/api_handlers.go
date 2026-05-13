@@ -73,7 +73,7 @@ const defaultPhotoRoute = "infinite-ai-photo"
 
 func (s *Server) handleDeveloperChatCompletion(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
-	key, userID, account, _, ok := s.authenticateDeveloperAPIRequest(w, r)
+	key, userID, account, rawToken, ok := s.authenticateDeveloperAPIRequest(w, r)
 	if !ok {
 		return
 	}
@@ -139,11 +139,28 @@ func (s *Server) handleDeveloperChatCompletion(w http.ResponseWriter, r *http.Re
 			Attachments: attachments,
 		})
 	}
+	quotaReservation, quotaOK := s.reserveInfiniteCodeQuota(w, r, rawToken, userID, body.Model)
+	if !quotaOK {
+		status = "quota_exhausted"
+		return
+	}
+	if developerToolsRequireAgentProxy(body.Tools) {
+		if err := s.proxyDeveloperChatCompletions(r.Context(), w, body.Model, chatCompletionProxyPayload(body)); err != nil {
+			status = classifyUpstreamErrorStatus(err)
+			errorDetail = summarizeErrorDetail(err)
+			s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "agent_proxy_failed", err)
+			httpx.Error(w, http.StatusBadGateway, "agent_proxy_failed", sanitizeUserFacingChatError(err))
+			return
+		}
+		status = "ok"
+		return
+	}
 	if body.Stream && !developerToolsRequestWebSearch(body.Tools) {
 		status = "ok"
 		if err := s.streamDeveloperChatCompletionNative(r.Context(), w, body.Model, messages); err != nil {
 			status = classifyUpstreamErrorStatus(err)
 			errorDetail = summarizeErrorDetail(err)
+			s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "stream_generation_failed", err)
 		}
 		return
 	}
@@ -151,6 +168,7 @@ func (s *Server) handleDeveloperChatCompletion(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		status = classifyUpstreamErrorStatus(err)
 		errorDetail = summarizeErrorDetail(err)
+		s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "upstream_generation_failed", err)
 		httpx.Error(w, http.StatusBadGateway, "upstream_generation_failed", sanitizeUserFacingChatError(err))
 		return
 	}
@@ -186,7 +204,7 @@ func (s *Server) handleDeveloperChatCompletion(w http.ResponseWriter, r *http.Re
 
 func (s *Server) handleDeveloperResponses(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
-	key, userID, account, _, ok := s.authenticateDeveloperAPIRequest(w, r)
+	key, userID, account, rawToken, ok := s.authenticateDeveloperAPIRequest(w, r)
 	if !ok {
 		return
 	}
@@ -231,11 +249,28 @@ func (s *Server) handleDeveloperResponses(w http.ResponseWriter, r *http.Request
 		httpx.Error(w, http.StatusBadRequest, "responses_input_required", "请提供 input")
 		return
 	}
+	quotaReservation, quotaOK := s.reserveInfiniteCodeQuota(w, r, rawToken, userID, body.Model)
+	if !quotaOK {
+		status = "quota_exhausted"
+		return
+	}
+	if developerToolsRequireAgentProxy(body.Tools) {
+		if err := s.proxyDeveloperResponses(r.Context(), w, body.Model, responsesProxyPayload(body)); err != nil {
+			status = classifyUpstreamErrorStatus(err)
+			errorDetail = summarizeErrorDetail(err)
+			s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "agent_proxy_failed", err)
+			httpx.Error(w, http.StatusBadGateway, "agent_proxy_failed", sanitizeUserFacingChatError(err))
+			return
+		}
+		status = "ok"
+		return
+	}
 	if body.Stream && !developerToolsRequestWebSearch(body.Tools) {
 		status = "ok"
 		if err := s.streamDeveloperResponsesNative(r.Context(), w, body.Model, messages); err != nil {
 			status = classifyUpstreamErrorStatus(err)
 			errorDetail = summarizeErrorDetail(err)
+			s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "stream_generation_failed", err)
 		}
 		return
 	}
@@ -243,6 +278,7 @@ func (s *Server) handleDeveloperResponses(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		status = classifyUpstreamErrorStatus(err)
 		errorDetail = summarizeErrorDetail(err)
+		s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "upstream_generation_failed", err)
 		httpx.Error(w, http.StatusBadGateway, "upstream_generation_failed", sanitizeUserFacingChatError(err))
 		return
 	}
@@ -256,7 +292,7 @@ func (s *Server) handleDeveloperResponses(w http.ResponseWriter, r *http.Request
 
 func (s *Server) handleDeveloperAnthropicMessage(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
-	key, userID, account, _, ok := s.authenticateDeveloperAPIRequest(w, r)
+	key, userID, account, rawToken, ok := s.authenticateDeveloperAPIRequest(w, r)
 	if !ok {
 		return
 	}
@@ -326,10 +362,16 @@ func (s *Server) handleDeveloperAnthropicMessage(w http.ResponseWriter, r *http.
 			Attachments: attachments,
 		})
 	}
+	quotaReservation, quotaOK := s.reserveInfiniteCodeQuota(w, r, rawToken, userID, body.Model)
+	if !quotaOK {
+		status = "quota_exhausted"
+		return
+	}
 	reply, err := s.generateAIResponse(r.Context(), body.Model, messages)
 	if err != nil {
 		status = classifyUpstreamErrorStatus(err)
 		errorDetail = summarizeErrorDetail(err)
+		s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "upstream_generation_failed", err)
 		httpx.Error(w, http.StatusBadGateway, "upstream_generation_failed", sanitizeUserFacingChatError(err))
 		return
 	}
@@ -356,7 +398,7 @@ func (s *Server) handleDeveloperAnthropicMessage(w http.ResponseWriter, r *http.
 
 func (s *Server) handleDeveloperImageGeneration(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
-	key, userID, account, _, ok := s.authenticateDeveloperAPIRequest(w, r)
+	key, userID, account, rawToken, ok := s.authenticateDeveloperAPIRequest(w, r)
 	if !ok {
 		return
 	}
@@ -417,10 +459,16 @@ func (s *Server) handleDeveloperImageGeneration(w http.ResponseWriter, r *http.R
 			ErrorDetail: errorDetail,
 		})
 	}()
+	quotaReservation, quotaOK := s.reserveInfiniteCodeQuota(w, r, rawToken, userID, body.Model)
+	if !quotaOK {
+		status = "quota_exhausted"
+		return
+	}
 	responsePayload, err := s.generateImageResponse(r.Context(), body.Model, body)
 	if err != nil {
 		status = classifyUpstreamErrorStatus(err)
 		errorDetail = summarizeErrorDetail(err)
+		s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "upstream_image_generation_failed", err)
 		httpx.Error(w, http.StatusBadGateway, "upstream_image_generation_failed", sanitizeUserFacingChatError(err))
 		return
 	}
@@ -430,7 +478,7 @@ func (s *Server) handleDeveloperImageGeneration(w http.ResponseWriter, r *http.R
 
 func (s *Server) handleDeveloperImageEdit(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
-	key, userID, account, _, ok := s.authenticateDeveloperAPIRequest(w, r)
+	key, userID, account, rawToken, ok := s.authenticateDeveloperAPIRequest(w, r)
 	if !ok {
 		return
 	}
@@ -490,10 +538,16 @@ func (s *Server) handleDeveloperImageEdit(w http.ResponseWriter, r *http.Request
 		InputFidelity:   strings.TrimSpace(r.FormValue("input_fidelity")),
 		ReferenceImages: references,
 	}
+	quotaReservation, quotaOK := s.reserveInfiniteCodeQuota(w, r, rawToken, userID, model)
+	if !quotaOK {
+		status = "quota_exhausted"
+		return
+	}
 	payload, err := s.generateImageResponse(r.Context(), model, request)
 	if err != nil {
 		status = classifyUpstreamErrorStatus(err)
 		errorDetail = summarizeErrorDetail(err)
+		s.refundInfiniteCodeQuota(r.Context(), quotaReservation, "upstream_image_edit_failed", err)
 		httpx.Error(w, http.StatusBadGateway, "upstream_image_edit_failed", sanitizeUserFacingChatError(err))
 		return
 	}
@@ -507,6 +561,11 @@ func (s *Server) authenticateDeveloperAPIRequest(w http.ResponseWriter, r *http.
 		httpx.Error(w, http.StatusUnauthorized, "api_key_missing", "请提供 API Key")
 		return nil, "", "", "", false
 	}
+	if strings.HasPrefix(rawAPIKey, auth.InfiniteCodeAccessTokenPrefix) {
+		if key, userID, account, ok := s.authenticateInfiniteCodeToken(r.Context(), rawAPIKey); ok {
+			return key, userID, account, rawAPIKey, true
+		}
+	}
 	key, userID, err := s.Store.FindAPIKeyByHash(r.Context(), auth.HashAPIKey(rawAPIKey))
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, "api_key_invalid", "API Key 无效或已被撤销")
@@ -517,6 +576,40 @@ func (s *Server) authenticateDeveloperAPIRequest(w http.ResponseWriter, r *http.
 		account = user.Email
 	}
 	return key, userID, account, rawAPIKey, true
+}
+
+func (s *Server) authenticateInfiniteCodeToken(ctx context.Context, rawToken string) (*store.APIKey, string, string, bool) {
+	if s.Redis == nil {
+		return nil, "", "", false
+	}
+	raw, err := s.Redis.Get(ctx, auth.InfiniteCodeTokenRedisKey("access", rawToken)).Result()
+	if err != nil {
+		return nil, "", "", false
+	}
+	var principal auth.InfiniteCodeTokenPrincipal
+	if err := json.Unmarshal([]byte(raw), &principal); err != nil || strings.TrimSpace(principal.UserID) == "" {
+		return nil, "", "", false
+	}
+	account := principal.Email
+	if user, err := s.Store.GetUserByID(ctx, principal.UserID); err == nil {
+		if user.Status != "active" {
+			return nil, "", "", false
+		}
+		if strings.TrimSpace(user.Email) != "" {
+			account = user.Email
+		}
+	}
+	if strings.TrimSpace(account) == "" {
+		account = principal.UserID
+	}
+	return &store.APIKey{
+		ID:                 "00000000-0000-0000-0000-000000000000",
+		Name:               "Infinite Code",
+		Prefix:             auth.InfiniteCodeAccessTokenPrefix,
+		Scopes:             []string{"*"},
+		Status:             "active",
+		RateLimitPerMinute: 120,
+	}, principal.UserID, account, true
 }
 
 func developerAPIKeyFromRequest(r *http.Request) string {
@@ -719,6 +812,52 @@ func developerToolsRequestWebSearch(tools []map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func developerToolsRequireAgentProxy(tools []map[string]any) bool {
+	return len(tools) > 0 && !developerToolsRequestWebSearch(tools)
+}
+
+func chatCompletionProxyPayload(body chatCompletionRequest) map[string]any {
+	payload := map[string]any{
+		"model":    body.Model,
+		"messages": body.Messages,
+		"stream":   body.Stream,
+	}
+	if len(body.Tools) > 0 {
+		payload["tools"] = body.Tools
+		if body.ToolChoice != nil {
+			payload["tool_choice"] = body.ToolChoice
+		}
+	}
+	return payload
+}
+
+func responsesProxyPayload(body responsesCreateRequest) map[string]any {
+	payload := map[string]any{
+		"model": body.Model,
+		"input": body.Input,
+		"store": false,
+	}
+	if body.Store != nil {
+		payload["store"] = *body.Store
+	}
+	if body.Stream {
+		payload["stream"] = true
+	}
+	if body.Instructions != nil {
+		payload["instructions"] = body.Instructions
+	}
+	if len(body.Tools) > 0 {
+		payload["tools"] = body.Tools
+		if body.ToolChoice != nil {
+			payload["tool_choice"] = body.ToolChoice
+		}
+	}
+	if len(body.Include) > 0 {
+		payload["include"] = body.Include
+	}
+	return payload
 }
 
 func parseResponsesInputMessages(input any) []aiMessage {

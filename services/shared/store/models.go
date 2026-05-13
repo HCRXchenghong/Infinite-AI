@@ -17,13 +17,13 @@ func (s *Store) ListActiveModelRoutes(ctx context.Context, includeSecrets bool) 
 
 func (s *Store) listModelRoutes(ctx context.Context, includeSecrets bool, activeOnly bool) ([]ModelRoute, error) {
 	query := `
-		SELECT id::text, slug, name, protocol, strategy, model_type, upstream_model, description, prompt_enabled, prompt_text, active
+		SELECT id::text, slug, name, protocol, strategy, model_type, upstream_model, description, sort_order, prompt_enabled, prompt_text, active
 		FROM model_routes
 	`
 	if activeOnly {
 		query += ` WHERE active = TRUE`
 	}
-	query += ` ORDER BY created_at ASC`
+	query += ` ORDER BY sort_order ASC, created_at ASC`
 	rows, err := s.DB.Query(ctx, `
 	`+query)
 	if err != nil {
@@ -33,7 +33,7 @@ func (s *Store) listModelRoutes(ctx context.Context, includeSecrets bool, active
 	out := make([]ModelRoute, 0)
 	for rows.Next() {
 		var route ModelRoute
-		if err := rows.Scan(&route.ID, &route.Slug, &route.Name, &route.Protocol, &route.Strategy, &route.ModelType, &route.UpstreamModel, &route.Description, &route.PromptEnabled, &route.PromptText, &route.Active); err != nil {
+		if err := rows.Scan(&route.ID, &route.Slug, &route.Name, &route.Protocol, &route.Strategy, &route.ModelType, &route.UpstreamModel, &route.Description, &route.SortOrder, &route.PromptEnabled, &route.PromptText, &route.Active); err != nil {
 			return nil, err
 		}
 		if !includeSecrets {
@@ -79,10 +79,10 @@ func (s *Store) ListModelEndpoints(ctx context.Context, routeID string, includeS
 func (s *Store) GetModelRouteBySlug(ctx context.Context, slug string, includeSecrets bool) (*ModelRoute, error) {
 	var route ModelRoute
 	err := s.DB.QueryRow(ctx, `
-		SELECT id::text, slug, name, protocol, strategy, model_type, upstream_model, description, prompt_enabled, prompt_text, active
+		SELECT id::text, slug, name, protocol, strategy, model_type, upstream_model, description, sort_order, prompt_enabled, prompt_text, active
 		FROM model_routes
 		WHERE slug = $1
-	`, slug).Scan(&route.ID, &route.Slug, &route.Name, &route.Protocol, &route.Strategy, &route.ModelType, &route.UpstreamModel, &route.Description, &route.PromptEnabled, &route.PromptText, &route.Active)
+	`, slug).Scan(&route.ID, &route.Slug, &route.Name, &route.Protocol, &route.Strategy, &route.ModelType, &route.UpstreamModel, &route.Description, &route.SortOrder, &route.PromptEnabled, &route.PromptText, &route.Active)
 	if err != nil {
 		return nil, scanNotFound(err)
 	}
@@ -105,12 +105,12 @@ func (s *Store) FindActiveModelRoute(ctx context.Context, selector string, inclu
 	}
 	var route ModelRoute
 	err := s.DB.QueryRow(ctx, `
-		SELECT id::text, slug, name, protocol, strategy, model_type, upstream_model, description, prompt_enabled, prompt_text, active
+		SELECT id::text, slug, name, protocol, strategy, model_type, upstream_model, description, sort_order, prompt_enabled, prompt_text, active
 		FROM model_routes
 		WHERE active = TRUE AND (slug = $1 OR upstream_model = $1)
 		ORDER BY CASE WHEN slug = $1 THEN 0 ELSE 1 END, updated_at DESC, created_at DESC
 		LIMIT 1
-	`, selector).Scan(&route.ID, &route.Slug, &route.Name, &route.Protocol, &route.Strategy, &route.ModelType, &route.UpstreamModel, &route.Description, &route.PromptEnabled, &route.PromptText, &route.Active)
+	`, selector).Scan(&route.ID, &route.Slug, &route.Name, &route.Protocol, &route.Strategy, &route.ModelType, &route.UpstreamModel, &route.Description, &route.SortOrder, &route.PromptEnabled, &route.PromptText, &route.Active)
 	if err != nil {
 		return nil, scanNotFound(err)
 	}
@@ -130,8 +130,8 @@ func (s *Store) UpsertModelRoute(ctx context.Context, route ModelRoute) error {
 	return s.Tx(ctx, func(tx pgx.Tx) error {
 		var routeID string
 		err := tx.QueryRow(ctx, `
-			INSERT INTO model_routes (slug, name, protocol, strategy, model_type, upstream_model, description, prompt_enabled, prompt_text, active)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			INSERT INTO model_routes (slug, name, protocol, strategy, model_type, upstream_model, description, sort_order, prompt_enabled, prompt_text, active)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			ON CONFLICT (slug) DO UPDATE SET
 				name = EXCLUDED.name,
 				protocol = EXCLUDED.protocol,
@@ -139,12 +139,13 @@ func (s *Store) UpsertModelRoute(ctx context.Context, route ModelRoute) error {
 				model_type = EXCLUDED.model_type,
 				upstream_model = EXCLUDED.upstream_model,
 				description = EXCLUDED.description,
+				sort_order = EXCLUDED.sort_order,
 				prompt_enabled = EXCLUDED.prompt_enabled,
 				prompt_text = EXCLUDED.prompt_text,
 				active = EXCLUDED.active,
 				updated_at = NOW()
 			RETURNING id::text
-		`, route.Slug, route.Name, route.Protocol, route.Strategy, route.ModelType, route.UpstreamModel, route.Description, route.PromptEnabled, route.PromptText, route.Active).Scan(&routeID)
+		`, route.Slug, route.Name, route.Protocol, route.Strategy, route.ModelType, route.UpstreamModel, route.Description, route.SortOrder, route.PromptEnabled, route.PromptText, route.Active).Scan(&routeID)
 		if err != nil {
 			return err
 		}

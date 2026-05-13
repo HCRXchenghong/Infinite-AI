@@ -297,6 +297,10 @@ func (s *Store) GlobalSettings(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	infiniteCodeModelLimits, err := s.GetInfiniteCodeModelLimits(ctx)
+	if err != nil {
+		return nil, err
+	}
 	shareCollaborationConfig, err := s.GetShareCollaborationConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -308,16 +312,17 @@ func (s *Store) GlobalSettings(ctx context.Context) (map[string]any, error) {
 	authSecurity.SMSGatewayConfigured = smsGateway.Enabled && smsGateway.EndpointURL != ""
 	authSecurity.EmailGatewayConfigured = emailGateway.Enabled && emailGateway.EndpointURL != ""
 	return map[string]any{
-		"registerEnabled":         registerEnabled,
-		"oauthProviders":          oauth,
-		"authSecurity":            authSecurity,
-		"emailGateway":            emailGateway,
-		"smsGateway":              smsGateway,
-		"modelMembershipLimits":   modelMembershipLimits,
-		"modelContextLimits":      modelContextLimits,
-		"infiniteCodeQuotaConfig": infiniteCodeQuotaConfig,
+		"registerEnabled":          registerEnabled,
+		"oauthProviders":           oauth,
+		"authSecurity":             authSecurity,
+		"emailGateway":             emailGateway,
+		"smsGateway":               smsGateway,
+		"modelMembershipLimits":    modelMembershipLimits,
+		"modelContextLimits":       modelContextLimits,
+		"infiniteCodeQuotaConfig":  infiniteCodeQuotaConfig,
+		"infiniteCodeModelLimits":  infiniteCodeModelLimits,
 		"shareCollaborationConfig": shareCollaborationConfig,
-		"searchProvider":          searchProvider,
+		"searchProvider":           searchProvider,
 	}, nil
 }
 

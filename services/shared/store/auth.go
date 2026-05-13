@@ -32,7 +32,7 @@ func (s *Store) CreateUser(ctx context.Context, input CreateUserInput) (*User, e
 	}
 	_, _ = s.DB.Exec(ctx, `
 		INSERT INTO user_settings (user_id, theme, language, deep_search_default, chat_history_enabled, memory_enabled)
-		VALUES ($1, 'dark', 'auto', FALSE, TRUE, TRUE)
+		VALUES ($1, 'system', 'auto', FALSE, TRUE, TRUE)
 		ON CONFLICT (user_id) DO NOTHING
 	`, user.ID)
 	_, _ = s.DB.Exec(ctx, `
@@ -422,7 +422,7 @@ func nullString(value string) *string {
 func (s *Store) EnsureUserSettings(ctx context.Context, userID string) error {
 	_, err := s.DB.Exec(ctx, `
 		INSERT INTO user_settings (user_id, theme, language, deep_search_default, selected_model_slug, chat_history_enabled, memory_enabled)
-		VALUES ($1, 'dark', 'auto', FALSE, '', TRUE, TRUE)
+		VALUES ($1, 'system', 'auto', FALSE, '', TRUE, TRUE)
 		ON CONFLICT (user_id) DO NOTHING
 	`, userID)
 	return err

@@ -96,6 +96,10 @@ func (s *Server) routes() chi.Router {
 	r.With(requestLog).Get("/auth/session", s.handleSession)
 	r.With(requestLog).Get("/auth/oauth/providers", s.handleOAuthProviders)
 	r.With(requestLog).Get("/auth/captcha", s.handleCaptcha)
+	r.With(requestLog).Get("/auth/device", s.handleInfiniteCodeAuthorize)
+	r.With(requestLog, s.riskGuard("auth:device-code", riskRule{Window: 15 * time.Minute, LimitPerIP: 30, LimitPerFingerprint: 20, BlockDuration: 30 * time.Minute, Message: "授权请求过于频繁，请稍后再试。"})).Post("/auth/device/code", s.handleInfiniteCodeDeviceCode)
+	r.With(requestLog, s.riskGuard("auth:device-authorize", riskRule{Window: 15 * time.Minute, LimitPerIP: 30, LimitPerFingerprint: 20, BlockDuration: 30 * time.Minute, Message: "授权请求过于频繁，请稍后再试。"})).Post("/auth/device", s.handleInfiniteCodeAuthorize)
+	r.With(requestLog, s.riskGuard("auth:device-token", riskRule{Window: 15 * time.Minute, LimitPerIP: 240, LimitPerFingerprint: 180, BlockDuration: 15 * time.Minute, Message: "登录检查过于频繁，请稍后再试。"})).Post("/auth/device/token", s.handleInfiniteCodeDeviceToken)
 	r.With(requestLog, s.riskGuard("auth:contact-code", riskRule{Window: 10 * time.Minute, LimitPerIP: 10, LimitPerFingerprint: 6, BlockDuration: 30 * time.Minute, Message: "验证码请求过于频繁，请稍后再试。"})).Post("/auth/contact/send-code", s.handleSendContactCode)
 	r.With(requestLog, s.riskGuard("auth:phone-code", riskRule{Window: 10 * time.Minute, LimitPerIP: 10, LimitPerFingerprint: 6, BlockDuration: 30 * time.Minute, Message: "验证码请求过于频繁，请稍后再试。"})).Post("/auth/phone/send-code", s.handleSendPhoneCode)
 	r.With(requestLog, s.riskGuard("auth:register", riskRule{Window: 30 * time.Minute, LimitPerIP: 12, LimitPerFingerprint: 8, BlockDuration: time.Hour, Message: "注册请求过于频繁，请稍后再试。"})).Post("/auth/register", s.handleRegister)
@@ -109,6 +113,12 @@ func (s *Server) routes() chi.Router {
 	r.With(requestLog).Post("/auth/admin/logout", s.handleAdminLogout)
 	r.With(requestLog).Get("/auth/oauth/start/{slug}", s.handleOAuthStart)
 	r.With(requestLog).Get("/auth/oauth/callback/{slug}", s.handleOAuthCallback)
+
+	r.With(requestLog).Get("/api/user", s.handleInfiniteCodeAPIUser)
+	r.With(requestLog).Get("/api/orgs", s.handleInfiniteCodeAPIOrgs)
+	r.With(requestLog).Get("/api/config", s.handleInfiniteCodeAPIConfig)
+	r.With(requestLog).Get("/api/desktop/billing", s.handleInfiniteCodeDesktopBilling)
+	r.With(requestLog, s.riskGuard("desktop:error-report", riskRule{Window: time.Minute, LimitPerIP: 120, LimitPerFingerprint: 120, BlockDuration: 5 * time.Minute, Message: "错误上报过于频繁，请稍后再试。"})).Post("/api/desktop/errors", s.handleInfiniteCodeDesktopError)
 
 	r.With(requestLog).Handle("/billing/plans", s.proxyPublic())
 	r.With(requestLog).Handle("/downloads/releases", s.proxyPublic())

@@ -1453,19 +1453,9 @@ func (s *Server) buildInfiniteCodeUsage(ctx context.Context, userID string) map[
 		anchor = sub.StartedAt.UTC()
 	}
 	windowStart, nextResetAt := infiniteCodeWindowBounds(anchor, planQuota.ResetHours, time.Now().UTC())
-	entries, _ := s.loadAPIStats(ctx, 300)
-	used := 0
-	for _, entry := range entries {
-		if entry.UserID != userID || entry.Source != "developer_api" || entry.Status != "ok" {
-			continue
-		}
-		if entry.Path != "/v1/chat/completions" && entry.Path != "/v1/messages" {
-			continue
-		}
-		if entry.Timestamp.Before(windowStart) {
-			continue
-		}
-		used++
+	used, err := s.Store.CountInfiniteCodeUsageSince(ctx, userID, windowStart)
+	if err != nil {
+		used = 0
 	}
 	remaining := planQuota.Credits - used
 	if remaining < 0 {
@@ -1647,8 +1637,12 @@ func (s *Server) handleUpdateUserSettings(w http.ResponseWriter, r *http.Request
 	if body.MemoryEnabled != nil {
 		memoryEnabled = *body.MemoryEnabled
 	}
+	theme := body.Theme
+	if theme != "system" && theme != "dark" && theme != "light" {
+		theme = "system"
+	}
 	err := s.Store.UpdateUserSettings(r.Context(), currentUserID(r), store.UserSettings{
-		Theme:              body.Theme,
+		Theme:              theme,
 		Language:           body.Language,
 		DeepSearchDefault:  body.DeepSearchDefault,
 		SelectedModelSlug:  body.SelectedModelSlug,

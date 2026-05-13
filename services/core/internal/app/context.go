@@ -172,6 +172,7 @@ func (s *Server) routes() chi.Router {
 		r.With(requireAdminRoles("ops_admin", "support_admin", "finance_admin", "super_admin")).Put("/admin/settings/model-context-limits", s.handleAdminUpdateModelContextLimits)
 		r.With(requireAdminRoles("ops_admin", "support_admin", "finance_admin", "super_admin")).Put("/admin/settings/search-provider", s.handleAdminUpdateSearchProvider)
 		r.With(requireAdminRoles("ops_admin", "support_admin", "finance_admin", "super_admin")).Put("/admin/settings/infinite-code-quota", s.handleAdminUpdateInfiniteCodeQuotaConfig)
+		r.With(requireAdminRoles("ops_admin", "support_admin", "finance_admin", "super_admin")).Put("/admin/settings/infinite-code-model-limits", s.handleAdminUpdateInfiniteCodeModelLimits)
 		r.With(requireAdminRoles("ops_admin", "support_admin", "finance_admin", "super_admin")).Put("/admin/settings/share-collaboration", s.handleAdminUpdateShareCollaborationConfig)
 		r.With(requireAdminRoles("ops_admin", "super_admin")).Post("/admin/settings/oauth", s.handleAdminCreateOAuth)
 		r.With(requireAdminRoles("ops_admin", "super_admin")).Put("/admin/settings/oauth/{slug}", s.handleAdminUpdateOAuth)

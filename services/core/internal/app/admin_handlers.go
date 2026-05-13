@@ -497,6 +497,19 @@ func (s *Server) handleAdminUpdateInfiniteCodeQuotaConfig(w http.ResponseWriter,
 	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+func (s *Server) handleAdminUpdateInfiniteCodeModelLimits(w http.ResponseWriter, r *http.Request) {
+	var body map[string]map[string]int
+	if err := httpx.Decode(r, &body); err != nil {
+		badRequest(w, err)
+		return
+	}
+	if err := s.Store.UpdateInfiniteCodeModelLimits(r.Context(), body); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "infinite_code_model_limits_update_failed", err.Error())
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (s *Server) handleAdminUpdateShareCollaborationConfig(w http.ResponseWriter, r *http.Request) {
 	var body map[string]store.ShareCollaborationPlan
 	if err := httpx.Decode(r, &body); err != nil {

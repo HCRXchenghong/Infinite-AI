@@ -4,18 +4,19 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { BRAND_LOGO_SRC } from '../lib/brand'
 import { getUserAppBaseURL } from '../lib/runtime'
+import { readThemePreference, type ThemePreference, useResolvedTheme } from '../lib/theme'
 
 export function RedeemPage() {
   const navigate = useNavigate()
   const userAppBaseURL = getUserAppBaseURL()
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference())
   const [code, setCode] = useState('')
   const [step, setStep] = useState<'input' | 'unopened' | 'opened' | 'redeeming' | 'success'>('input')
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<any>(null)
   const [session, setSession] = useState<Awaited<ReturnType<typeof api.getSession>> | null>(null)
 
-  const isDark = theme === 'dark'
+  const isDark = useResolvedTheme(theme) === 'dark'
   const colors = {
     appBg: isDark ? 'bg-[#111111]' : 'bg-[#fafafa]',
     cardBg: isDark ? 'bg-[#1a1a1a]' : 'bg-white',
@@ -88,7 +89,8 @@ export function RedeemPage() {
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center transition-colors duration-500 ${colors.appBg} ${colors.textMain}`}>
       <div className="absolute top-6 right-6 z-50">
-        <select value={theme} onChange={(event) => setTheme(event.target.value as 'dark' | 'light')} className={`px-3 py-1.5 rounded-md border text-sm ${isDark ? 'bg-[#1a1a1a] border-[#333] text-white' : 'bg-white border-[#ccc] text-black'}`}>
+        <select value={theme} onChange={(event) => setTheme(event.target.value as ThemePreference)} className={`px-3 py-1.5 rounded-md border text-sm ${isDark ? 'bg-[#1a1a1a] border-[#333] text-white' : 'bg-white border-[#ccc] text-black'}`}>
+          <option value="system">跟随系统</option>
           <option value="dark">深色主题</option>
           <option value="light">浅色主题</option>
         </select>
