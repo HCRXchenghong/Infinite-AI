@@ -6,6 +6,7 @@ This release is tracked on GitHub at https://github.com/HCRXchenghong/Infinite-A
 
 ### Included
 
+- Added Infinite Code as a formal Infinite-AI v2.0.0 product module. Infinite Code is the desktop and code-agent experience, while Infinite-AI provides shared account, authentication, model, subscription, quota, usage, telemetry, and admin-control services.
 - Connected the Infinite Code desktop login, quota, billing, usage, model, and account flows to the Infinite-AI service layer.
 - Added desktop-facing API support for account status, organization data, model availability, quota sync, and error reporting.
 - Added admin-side model and quota management groundwork for controlling Infinite Code model access separately from the web app.
